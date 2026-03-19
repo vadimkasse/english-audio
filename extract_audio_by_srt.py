@@ -133,13 +133,14 @@ def main():
     out_name = sanitize_filename(out_name)
     out_path = OUTPUT_DIR / f"{out_name}.mp3"
 
-    if out_path.exists():
-        replace = ask_yes_no("Файл существует, заменить? y/n\n")
-        if not replace:
-            print("Файл не создан")
-            sys.exit(0)
-    else:
-        ffmpeg_overwrite_flag = "-n"
+ if out_path.exists():
+    replace = ask_yes_no("Файл существует, заменить? y/n\n")
+    if not replace:
+        print("Файл не создан")
+        sys.exit(0)
+    ffmpeg_overwrite_flag = "-y"
+else:
+    ffmpeg_overwrite_flag = "-n"
 
     cmd = [
         "ffmpeg",
@@ -161,7 +162,6 @@ def main():
         sys.exit(result.returncode)
 
     print(f"Готово: {out_path}")
-    subprocess.run(["open", "-R", str(out_path)])
 
 
 if __name__ == "__main__":
