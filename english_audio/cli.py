@@ -2,6 +2,7 @@
 import re
 import subprocess
 import sys
+import readline
 from pathlib import Path
 
 VIDEO_PATH = Path("/Users/vadimkasse/Yandex.Disk.localized/Загрузки/Friends.S01E01.The.One.Where.Monica.Gets.a.Roommate.mkv")
@@ -103,7 +104,15 @@ def main():
         print("Не удалось распарсить SRT.")
         sys.exit(1)
 
-    phrase = input("Фраза целиком?\n").strip()
+    print("Фраза целиком? (Enter 2 раза для окончания)")
+    lines = []
+    while True:
+        line = input()
+        if line == "":
+            break
+        lines.append(line)
+
+    phrase = " ".join(lines).strip()
     if not phrase:
         sys.exit(1)
 
@@ -126,7 +135,8 @@ def main():
             sys.exit(1)
         match = matches[int(choice) - 1]
 
-    out_name = input("Название отрывка?\n").strip()
+    out_name = input("Название отрывка?\n")
+    out_name = out_name.strip()
     if not out_name:
         sys.exit(1)
 
