@@ -14,8 +14,11 @@ AUDIO_STREAM = "0:2"
 def normalize_text(text: str) -> str:
     text = text.replace("\n", " ")
     text = re.sub(r"<[^>]+>", "", text)
+    text = text.casefold()
+    text = re.sub(r"[^\w\s]", " ", text)   # убрать пунктуацию
+    text = re.sub(r"_", " ", text)
     text = re.sub(r"\s+", " ", text).strip()
-    return text.casefold()
+    return text
 
 
 def parse_srt(srt_text: str):
@@ -56,12 +59,69 @@ def parse_srt(srt_text: str):
 
 def find_matches(items, phrase: str):
     target = normalize_text(phrase)
-    matches = []
+    if not target:
+        return []
 
-    for item in items:
-        text = item["normalized"]
-        if target == text or target in text or text in target:
-            matches.append(item)
+    matches = []
+    n = len(items)
+
+    for i in range(n):
+        combined_parts = []
+
+        for j in range(i, n):
+            combined_parts.append(items[j]["normalized"])
+            combined_text = " ".join(combined_parts)
+            combined_text = re.sub(r"\s+", " ", combined_text).strip()
+
+            # Нашли запрос внутри непрерывной склейки соседних блоков
+            if target in combined_text:
+                raw_joined = " ".join(
+                    items[k]["raw_text"].replace("\n", " ").strip()
+                    for k in range(i, j + 1)
+                )
+                raw_joined = re.sub(r"\s+", " ", raw_joined).strip()
+
+                matches.append({
+                    "start": items[i]["start"],
+                    "end": items[j]["end"],
+                    "raw_text": raw_joined,
+                    "normalized": combined_text,
+                })
+
+                # Важно: берём самый короткий диапазон от этой стартовой точки
+                break
+
+            # Если склейка уже длиннее запроса, и запроса в ней нет,
+            # дальше обычно только хуже — останавливаемся
+            if len(combined_text) > len(target) + 40:
+                break
+
+    return matches
+
+    # 2. Поиск через несколько подряд идущих блоков
+    n = len(items)
+    for i in range(n):
+        combined_parts = []
+        for j in range(i, n):
+            combined_parts.append(items[j]["normalized"])
+            combined_text = " ".join(part for part in combined_parts if part).strip()
+            combined_text = re.sub(r"\s+", " ", combined_text)
+
+            # если длина сильно ушла дальше цели и точного вхождения нет — можно рано остановиться
+            if len(combined_text) > len(target) + 80 and target not in combined_text:
+                break
+
+            if target in combined_text or combined_text in target:
+                raw_joined = " ".join(items[k]["raw_text"].replace("\n", " ").strip() for k in range(i, j + 1))
+                raw_joined = re.sub(r"\s+", " ", raw_joined).strip()
+
+                matches.append({
+                    "start": items[i]["start"],
+                    "end": items[j]["end"],
+                    "raw_text": raw_joined,
+                    "normalized": combined_text,
+                })
+                break
 
     return matches
 
