@@ -1,0 +1,13 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "english-audio"
+version = "0.1.0"
+description = "Extract audio clips from video by phrase match in SRT"
+readme = "README.md"
+requires-python = ">=3.9"
+
+[project.scripts]
+audio = "english_audio.cli:main"

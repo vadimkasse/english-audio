@@ -1,0 +1,9 @@
+README.md
+pyproject.toml
+english_audio/__init__.py
+english_audio/cli.py
+english_audio.egg-info/PKG-INFO
+english_audio.egg-info/SOURCES.txt
+english_audio.egg-info/dependency_links.txt
+english_audio.egg-info/entry_points.txt
+english_audio.egg-info/top_level.txt
