@@ -1,0 +1,167 @@
+#!/usr/bin/env python3
+import re
+import subprocess
+import sys
+from pathlib import Path
+
+VIDEO_PATH = Path("/Users/vadimkasse/Yandex.Disk.localized/Загрузки/Friends.S01E01.The.One.Where.Monica.Gets.a.Roommate.mkv")
+SRT_PATH = Path("/Users/vadimkasse/Yandex.Disk.localized/Загрузки/Friends.S01E01.The.One.Where.Monica.Gets.a.Roommate.srt")
+OUTPUT_DIR = Path("/Users/vadimkasse/Yandex.Disk.localized/Загрузки/audio")
+AUDIO_STREAM = "0:2"
+
+
+def normalize_text(text: str) -> str:
+    text = text.replace("\n", " ")
+    text = re.sub(r"<[^>]+>", "", text)
+    text = re.sub(r"\s+", " ", text).strip()
+    return text.casefold()
+
+
+def parse_srt(srt_text: str):
+    blocks = re.split(r"\n\s*\n", srt_text.strip(), flags=re.MULTILINE)
+    items = []
+
+    for block in blocks:
+        lines = [line.rstrip() for line in block.splitlines() if line.strip()]
+        if len(lines) < 3:
+            continue
+
+        if re.fullmatch(r"\d+", lines[0]):
+            time_line = lines[1]
+            text_lines = lines[2:]
+        else:
+            time_line = lines[0]
+            text_lines = lines[1:]
+
+        m = re.match(
+            r"(\d{2}:\d{2}:\d{2},\d{3})\s*-->\s*(\d{2}:\d{2}:\d{2},\d{3})",
+            time_line
+        )
+        if not m:
+            continue
+
+        start, end = m.groups()
+        raw_text = "\n".join(text_lines).strip()
+
+        items.append({
+            "start": start,
+            "end": end,
+            "raw_text": raw_text,
+            "normalized": normalize_text(raw_text),
+        })
+
+    return items
+
+
+def find_matches(items, phrase: str):
+    target = normalize_text(phrase)
+    matches = []
+
+    for item in items:
+        text = item["normalized"]
+        if target == text or target in text or text in target:
+            matches.append(item)
+
+    return matches
+
+
+def sanitize_filename(name: str) -> str:
+    name = name.strip()
+    name = re.sub(r"[/:*?\"<>|]", "_", name)
+    name = re.sub(r"\s+", "_", name)
+    return name
+
+
+def ffmpeg_time(srt_time: str) -> str:
+    return srt_time.replace(",", ".")
+
+
+def ask_yes_no(prompt: str) -> bool:
+    while True:
+        answer = input(prompt).strip().lower()
+        if answer in {"y", "yes"}:
+            return True
+        if answer in {"n", "no"}:
+            return False
+
+
+def main():
+    if not VIDEO_PATH.exists():
+        print(f"Не найден видеофайл: {VIDEO_PATH}")
+        sys.exit(1)
+
+    if not SRT_PATH.exists():
+        print(f"Не найден SRT: {SRT_PATH}")
+        sys.exit(1)
+
+    OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+
+    srt_text = SRT_PATH.read_text(encoding="utf-8-sig")
+    items = parse_srt(srt_text)
+
+    if not items:
+        print("Не удалось распарсить SRT.")
+        sys.exit(1)
+
+    phrase = input("Фраза целиком?\n").strip()
+    if not phrase:
+        sys.exit(1)
+
+    matches = find_matches(items, phrase)
+
+    if not matches:
+        print("Не найдено.")
+        sys.exit(1)
+
+    if len(matches) == 1:
+        match = matches[0]
+    else:
+        print("Найдено несколько совпадений:")
+        for i, m in enumerate(matches, 1):
+            one_line = re.sub(r"\s+", " ", m["raw_text"]).strip()
+            print(f"{i}) {one_line} [{m['start']} --> {m['end']}]")
+
+        choice = input("Номер?\n").strip()
+        if not choice.isdigit() or not (1 <= int(choice) <= len(matches)):
+            sys.exit(1)
+        match = matches[int(choice) - 1]
+
+    out_name = input("Название отрывка?\n").strip()
+    if not out_name:
+        sys.exit(1)
+
+    out_name = sanitize_filename(out_name)
+    out_path = OUTPUT_DIR / f"{out_name}.mp3"
+
+    if out_path.exists():
+        replace = ask_yes_no("Файл существует, заменить? y/n\n")
+        if not replace:
+            sys.exit(0)
+        ffmpeg_overwrite_flag = "-y"
+    else:
+        ffmpeg_overwrite_flag = "-n"
+
+    cmd = [
+        "ffmpeg",
+        ffmpeg_overwrite_flag,
+        "-loglevel", "error",
+        "-ss", ffmpeg_time(match["start"]),
+        "-to", ffmpeg_time(match["end"]),
+        "-i", str(VIDEO_PATH),
+        "-map", AUDIO_STREAM,
+        "-vn",
+        "-ac", "1",
+        "-ar", "16000",
+        str(out_path),
+    ]
+
+    result = subprocess.run(cmd)
+    if result.returncode != 0:
+        print("Ошибка ffmpeg.")
+        sys.exit(result.returncode)
+
+    print(f"Готово: {out_path}")
+
+
+if __name__ == "__main__":
+    main()
